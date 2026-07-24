@@ -92,7 +92,7 @@
   </div>
 
   <button id="writeBtn">Записать на чип (NTAG215)</button>
-  <div id="log">Приложите метку после нажатия</div>
+  <div id="log">Приложите чип после нажатия</div>
 
   <script>
     const defaultTemps = {
@@ -124,18 +124,14 @@
 
     matSelect.dispatchEvent(new Event('change'));
 
-    document.getElementById('writeBtn').appendEventListener?.('click', async () => {}); // placeholder check
-    
     document.getElementById('writeBtn').addEventListener('click', async () => {
       if (!("NDEFReader" in window)) {
         logDiv.innerHTML = "<span class='error'>Web NFC не поддерживается! Откройте в Chrome на Android.</span>";
         return;
       }
 
-      // Убираем решетку из hex-цвета, чтобы прошивка не падала на парсинге
       const rawColor = document.getElementById('color').value.replace('#', '');
 
-      // Строгий формат OpenSpool для paxx12 U1 Extended
       const payloadObj = {
         protocol: "openspool",
         version: "1.0",
@@ -149,13 +145,21 @@
       };
 
       const payloadString = JSON.stringify(payloadObj);
+      
+      // Превращаем строку в массив байтов (ArrayBufferView), который требует Chrome
+      const encoder = new TextEncoder();
+      const encodedData = encoder.encode(payloadString);
 
       logDiv.innerHTML = "Ожидание метки... Приложите чип к телефону.";
 
       try {
         const ndef = new NDEFReader();
         await ndef.write({
-          records: [{ recordType: "mime", mediaType: "application/json", data: payloadString }]
+          records: [{
+            recordType: "mime",
+            mediaType: "application/json",
+            data: encodedData
+          }]
         });
         logDiv.innerHTML = `<span class='success'>✅ Успешно записано!</span><br><br>${payloadString}`;
       } catch (error) {
