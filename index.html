@@ -1,0 +1,168 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>OpenSpool Writer для U1 Extended</title>
+  <style>
+    body {
+      font-family: system-ui, sans-serif;
+      background-color: #121212;
+      color: #e0e0e0;
+      padding: 20px;
+      max-width: 400px;
+      margin: 0 auto;
+    }
+    .form-group { margin-bottom: 15px; }
+    label { display: block; margin-bottom: 5px; font-weight: bold; font-size: 14px; }
+    select, input {
+      width: 100%;
+      padding: 12px;
+      box-sizing: border-box;
+      background: #1e1e1e;
+      border: 1px solid #333;
+      color: #fff;
+      border-radius: 6px;
+      font-size: 16px;
+    }
+    input[type="color"] { padding: 5px; height: 45px; }
+    button {
+      width: 100%;
+      padding: 15px;
+      background: #4caf50;
+      color: white;
+      border: none;
+      border-radius: 6px;
+      font-size: 16px;
+      font-weight: bold;
+      cursor: pointer;
+      margin-top: 10px;
+    }
+    button:active { background: #388e3c; }
+    #log { margin-top: 20px; font-size: 13px; color: #aaa; text-align: center; word-break: break-all; }
+    .success { color: #4caf50 !important; }
+    .error { color: #f44336 !important; }
+  </style>
+</head>
+<body>
+
+  <h2>OpenSpool для U1 Extended</h2>
+
+  <div class="form-group">
+    <label>Бренд:</label>
+    <input type="text" id="brand" value="Generic">
+  </div>
+
+  <div class="form-group">
+    <label>Тип материала:</label>
+    <select id="material">
+      <option value="PLA">PLA</option>
+      <option value="PETG">PETG</option>
+      <option value="PETG-CF">PETG-CF</option>
+      <option value="PETG-GF">PETG-GF</option>
+      <option value="ABS">ABS</option>
+      <option value="ASA">ASA</option>
+      <option value="TPU">TPU</option>
+    </select>
+  </div>
+
+  <div class="form-group">
+    <label>Цвет катушки:</label>
+    <input type="color" id="color" value="#00FF00">
+  </div>
+
+  <div class="form-group">
+    <label>Мин. T сопла (°C):</label>
+    <input type="number" id="min_temp" step="1">
+  </div>
+
+  <div class="form-group">
+    <label>Макс. T сопла (°C):</label>
+    <input type="number" id="max_temp" step="1">
+  </div>
+
+  <div class="form-group">
+    <label>Мин. T стола (°C):</label>
+    <input type="number" id="bed_min_temp" step="1">
+  </div>
+
+  <div class="form-group">
+    <label>Макс. T стола (°C):</label>
+    <input type="number" id="bed_max_temp" step="1">
+  </div>
+
+  <button id="writeBtn">Записать на чип (NTAG215)</button>
+  <div id="log">Приложите метку после нажатия</div>
+
+  <script>
+    const defaultTemps = {
+      "PLA":     { min: 190, max: 220, bed_min: 50, bed_max: 60 },
+      "PETG":    { min: 230, max: 250, bed_min: 70, bed_max: 80 },
+      "PETG-CF": { min: 240, max: 260, bed_min: 75, bed_max: 85 },
+      "PETG-GF": { min: 240, max: 260, bed_min: 75, bed_max: 85 },
+      "ABS":     { min: 250, max: 270, bed_min: 90, bed_max: 100 },
+      "ASA":     { min: 250, max: 270, bed_min: 90, bed_max: 100 },
+      "TPU":     { min: 210, max: 230, bed_min: 40, bed_max: 50 }
+    };
+
+    const matSelect = document.getElementById('material');
+    const minTempInput = document.getElementById('min_temp');
+    const maxTempInput = document.getElementById('max_temp');
+    const bedMinInput = document.getElementById('bed_min_temp');
+    const bedMaxInput = document.getElementById('bed_max_temp');
+    const logDiv = document.getElementById('log');
+
+    matSelect.addEventListener('change', (e) => {
+      const mat = e.target.value;
+      if(defaultTemps[mat]) {
+        minTempInput.value = defaultTemps[mat].min;
+        maxTempInput.value = defaultTemps[mat].max;
+        bedMinInput.value = defaultTemps[mat].bed_min;
+        bedMaxInput.value = defaultTemps[mat].bed_max;
+      }
+    });
+
+    matSelect.dispatchEvent(new Event('change'));
+
+    document.getElementById('writeBtn').appendEventListener?.('click', async () => {}); // placeholder check
+    
+    document.getElementById('writeBtn').addEventListener('click', async () => {
+      if (!("NDEFReader" in window)) {
+        logDiv.innerHTML = "<span class='error'>Web NFC не поддерживается! Откройте в Chrome на Android.</span>";
+        return;
+      }
+
+      // Убираем решетку из hex-цвета, чтобы прошивка не падала на парсинге
+      const rawColor = document.getElementById('color').value.replace('#', '');
+
+      // Строгий формат OpenSpool для paxx12 U1 Extended
+      const payloadObj = {
+        protocol: "openspool",
+        version: "1.0",
+        brand: document.getElementById('brand').value,
+        type: matSelect.value,
+        color_hex: rawColor,
+        min_temp: parseInt(minTempInput.value),
+        max_temp: parseInt(maxTempInput.value),
+        bed_min_temp: parseInt(bedMinInput.value),
+        bed_max_temp: parseInt(bedMaxInput.value)
+      };
+
+      const payloadString = JSON.stringify(payloadObj);
+
+      logDiv.innerHTML = "Ожидание метки... Приложите чип к телефону.";
+
+      try {
+        const ndef = new NDEFReader();
+        await ndef.write({
+          records: [{ recordType: "mime", mediaType: "application/json", data: payloadString }]
+        });
+        logDiv.innerHTML = `<span class='success'>✅ Успешно записано!</span><br><br>${payloadString}`;
+      } catch (error) {
+        logDiv.innerHTML = `<span class='error'>❌ Ошибка: ${error.message}</span>`;
+      }
+    });
+  </script>
+
+</body>
+</html>
