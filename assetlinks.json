@@ -1,0 +1,10 @@
+[{
+  "relation": ["delegate_permission/common.handle_all_urls"],
+  "target": {
+    "namespace": "android_app",
+    "package_name": "io.github.johneagle200_ship_it.twa",
+    "sha256_cert_fingerprints": [
+      "94:C0:00:FC:41:FF:93:0C:8C:58:D0:C6:84:7B:C3:89:D0:CA:14:F0:E0:1F:61:AF:23:D4:A3:37:9D:3C:40:49"
+    ]
+  }
+}]
