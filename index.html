@@ -11,7 +11,7 @@
   <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<style>
+  <style>
     body {
       font-family: system-ui, sans-serif;
       background-color: #121212;
@@ -93,63 +93,35 @@
     <input type="number" id="max_temp" step="1">
   </div>
 
-  <div class="form-group">
-    <label>Т. стола (°C):</label>
-    <input type="number" id="bed_temp" step="1">
-  </div>
-
-  <div class="form-group">
-    <label>Т. 1-го слоя (°C):</label>
-    <input type="number" id="first_layer_temp" step="1">
-  </div>
-
-  <div class="form-group">
-    <label>Т. остальных слоев (°C):</label>
-    <input type="number" id="other_layer_temp" step="1">
-  </div>
-
-  <div class="form-group">
-    <label>Т. сушки (°C):</label>
-    <input type="number" id="drying_temp" step="1">
-  </div>
-
   <button id="writeBtn">Записать на чип (NTAG215/216)</button>
   <div id="log">Приложите чип после нажатия</div>
 
   <script>
-    // Регистрация Service Worker для квалификации PWA
+    // Регистрация Service Worker для PWA
     if ('serviceWorker' in navigator) {
       navigator.serviceWorker.register('sw.js').catch(() => {});
     }
 
     const defaultTemps = {
-      "PLA":     { min: 190, max: 220, bed: 55, first: 200, other: 200, drying: 45 },
-      "PETG":    { min: 230, max: 250, bed: 75, first: 240, other: 240, drying: 55 },
-      "PETG-CF": { min: 240, max: 260, bed: 80, first: 250, other: 250, drying: 55 },
-      "PETG-GF": { min: 240, max: 260, bed: 80, first: 250, other: 250, drying: 55 },
-      "ABS":     { min: 250, max: 270, bed: 95, first: 260, other: 260, drying: 65 },
-      "ASA":     { min: 250, max: 270, bed: 95, first: 260, other: 260, drying: 65 },
-      "TPU":     { min: 210, max: 230, bed: 45, first: 220, other: 220, drying: 45 }
+      "PLA":      { min: 190, max: 220 },
+      "PETG":     { min: 230, max: 250 },
+      "PETG-CF": { min: 240, max: 260 },
+      "PETG-GF": { min: 240, max: 260 },
+      "ABS":      { min: 250, max: 270 },
+      "ASA":      { min: 250, max: 270 },
+      "TPU":      { min: 210, max: 230 }
     };
 
     const matSelect = document.getElementById('material');
     const minTempInput = document.getElementById('min_temp');
     const maxTempInput = document.getElementById('max_temp');
-    const bedTempInput = document.getElementById('bed_temp');
-    const firstLayerInput = document.getElementById('first_layer_temp');
-    const otherLayerInput = document.getElementById('other_layer_temp');
-    const dryingTempInput = document.getElementById('drying_temp');
     const logDiv = document.getElementById('log');
 
     matSelect.addEventListener('change', (e) => {
       const mat = e.target.value;
-      if(defaultTemps[mat]) {
+      if (defaultTemps[mat]) {
         minTempInput.value = defaultTemps[mat].min;
         maxTempInput.value = defaultTemps[mat].max;
-        bedTempInput.value = defaultTemps[mat].bed;
-        firstLayerInput.value = defaultTemps[mat].first;
-        otherLayerInput.value = defaultTemps[mat].other;
-        dryingTempInput.value = defaultTemps[mat].drying;
       }
     });
 
@@ -161,20 +133,23 @@
         return;
       }
 
+      const minVal = parseInt(minTempInput.value) || 0;
+      const maxVal = parseInt(maxTempInput.value) || 0;
+
+      if (maxVal < minVal) {
+        logDiv.innerHTML = "<span class='error'>❌ Макс. температура должна быть больше или равна мин.!</span>";
+        return;
+      }
+
       const rawColor = document.getElementById('color').value.replace('#', '');
 
       const payloadObj = {
         protocol: "openspool",
-        version: "1.0",
-        brand: document.getElementById('brand').value,
+        brand: document.getElementById('brand').value || "Generic",
         type: matSelect.value,
         color_hex: rawColor,
-        hotend_min_temp: parseInt(minTempInput.value),
-        hotend_max_temp: parseInt(maxTempInput.value),
-        bed_temp: parseInt(bedTempInput.value),
-        first_layer_temp: parseInt(firstLayerInput.value),
-        other_layer_temp: parseInt(otherLayerInput.value),
-        drying_temp: parseInt(dryingTempInput.value)
+        min_temp: minVal,
+        max_temp: maxVal
       };
 
       const payloadString = JSON.stringify(payloadObj);
@@ -192,7 +167,7 @@
             data: encodedData
           }]
         });
-        logDiv.innerHTML = `<span class='success'>✅ Успешно записано!</span><br><br>${payloadString}`;
+        logDiv.innerHTML = `<span class='success'>✅ Успешно записано!</span><br><br><code>${payloadString}</code>`;
       } catch (error) {
         logDiv.innerHTML = `<span class='error'>❌ Ошибка: ${error.message}</span>`;
       }
