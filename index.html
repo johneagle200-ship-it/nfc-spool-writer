@@ -4,6 +4,14 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>OpenSpool Writer для U1 Extended</title>
+
+  <!-- PWA и метатеги для мобилок -->
+  <link rel="manifest" href="manifest.json">
+  <meta name="theme-color" content="#121212">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+
   <style>
     body {
       font-family: system-ui, sans-serif;
@@ -91,10 +99,15 @@
     <input type="number" id="bed_max_temp" step="1">
   </div>
 
-  <button id="writeBtn">Записать на чип (NTAG215)</button>
+  <button id="writeBtn">Записать на чип (NTAG215/216)</button>
   <div id="log">Приложите чип после нажатия</div>
 
   <script>
+    // Регистрация Service Worker для квалификации PWA
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.register('sw.js').catch(() => {});
+    }
+
     const defaultTemps = {
       "PLA":     { min: 190, max: 220, bed_min: 50, bed_max: 60 },
       "PETG":    { min: 230, max: 250, bed_min: 70, bed_max: 80 },
@@ -145,8 +158,6 @@
       };
 
       const payloadString = JSON.stringify(payloadObj);
-      
-      // Превращаем строку в массив байтов (ArrayBufferView), который требует Chrome
       const encoder = new TextEncoder();
       const encodedData = encoder.encode(payloadString);
 
