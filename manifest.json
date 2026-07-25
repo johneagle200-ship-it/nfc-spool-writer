@@ -1,15 +1,17 @@
 {
-  "name": "OpenSpool RFID Writer",
+  "name": "OpenSpool U1 Writer",
   "short_name": "OpenSpool",
   "start_url": "./index.html",
   "display": "standalone",
-  "background_color": "#ffffff",
-  "theme_color": "#000000",
+  "background_color": "#121212",
+  "theme_color": "#121212",
+  "orientation": "portrait",
   "icons": [
     {
-      "src": "icon-512.png",
+      "src": "https://cdn-icons-png.flaticon.com/512/5225/5225379.png",
       "sizes": "512x512",
-      "type": "image/png"
+      "type": "image/png",
+      "purpose": "any maskable"
     }
   ]
 }
