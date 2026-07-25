@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>OpenSpool Writer для U1 Extended v1.0</title>
+  <title>OpenSpool Writer для U1 Extended v1.3</title>
 
   <!-- PWA и метатеги для мобилок -->
   <link rel="manifest" href="manifest.json">
@@ -38,6 +38,13 @@
       font-size: 15px;
     }
     input[type="color"] { padding: 3px; height: 38px; }
+    .color-row {
+      display: flex;
+      gap: 10px;
+    }
+    .color-row > div {
+      flex: 1;
+    }
     button {
       width: 100%;
       padding: 12px;
@@ -58,11 +65,11 @@
 </head>
 <body>
 
-  <h2>OpenSpool Writer для U1 Extended v1.1</h2>
+  <h2>OpenSpool Writer (NTAG216) v1.3</h2>
 
   <div class="form-group">
     <label>Бренд:</label>
-    <input type="text" id="brand" value="Generic">
+    <input type="text" id="brand" value="Generic" placeholder="eSUN, Kingroon...">
   </div>
 
   <div class="form-group">
@@ -79,8 +86,39 @@
   </div>
 
   <div class="form-group">
-    <label>Цвет катушки:</label>
-    <input type="color" id="color" value="#00FF00">
+    <label>Подтип (необязательно):</label>
+    <input type="text" id="subtype" placeholder="Plus, Silk, Matte, High Speed...">
+  </div>
+
+  <div class="color-row">
+    <div class="form-group">
+      <label>Цвет:</label>
+      <input type="color" id="color" value="#FF69B4">
+    </div>
+    <div class="form-group">
+      <label>Прозрачность:</label>
+      <select id="alpha">
+        <option value="FF" selected>100% (Глухой)</option>
+        <option value="C0">75%</option>
+        <option value="80">50% (Полупрозрачный)</option>
+        <option value="40">25%</option>
+        <option value="00">0% (Прозрачный)</option>
+      </select>
+    </div>
+  </div>
+
+  <div class="form-group">
+    <label>Формат цвета (кодировка):</label>
+    <select id="color_format">
+      <option value="GRB" selected>GRB (Фикс для Snapmaker U1)</option>
+      <option value="RGB">RGB (Стандарт)</option>
+      <option value="BGR">BGR</option>
+    </select>
+  </div>
+
+  <div class="form-group">
+    <label>Вес катушки (г):</label>
+    <input type="number" id="weight" value="1000" step="50">
   </div>
 
   <div class="form-group">
@@ -93,7 +131,7 @@
     <input type="number" id="max_temp" step="1">
   </div>
 
-  <button id="writeBtn">Записать на чип (NTAG215/216)</button>
+  <button id="writeBtn">Записать на чип NTAG216</button>
   <div id="log">Приложите чип после нажатия</div>
 
   <script>
@@ -127,6 +165,17 @@
 
     matSelect.dispatchEvent(new Event('change'));
 
+    // Функция конвертации порядка байт цвета
+    function formatColorHex(hex, format) {
+      const r = hex.substring(0, 2);
+      const g = hex.substring(2, 4);
+      const b = hex.substring(4, 6);
+
+      if (format === 'GRB') return g + r + b; // Перестановка R и G для U1
+      if (format === 'BGR') return b + g + r;
+      return r + g + b;
+    }
+
     document.getElementById('writeBtn').addEventListener('click', async () => {
       if (!("NDEFReader" in window)) {
         logDiv.innerHTML = "<span class='error'>Web NFC не поддерживается! Откройте в Chrome на Android.</span>";
@@ -135,6 +184,7 @@
 
       const minVal = parseInt(minTempInput.value) || 0;
       const maxVal = parseInt(maxTempInput.value) || 0;
+      const weightVal = parseInt(document.getElementById('weight').value) || 1000;
 
       if (maxVal < minVal) {
         logDiv.innerHTML = "<span class='error'>❌ Макс. температура должна быть больше или равна мин.!</span>";
@@ -142,12 +192,18 @@
       }
 
       const rawColor = document.getElementById('color').value.replace('#', '');
+      const colorFormat = document.getElementById('color_format').value;
+      const processedColor = formatColorHex(rawColor, colorFormat).toUpperCase();
+      const subtypeVal = document.getElementById('subtype').value.trim();
 
       const payloadObj = {
         protocol: "openspool",
         brand: document.getElementById('brand').value || "Generic",
         type: matSelect.value,
-        color_hex: rawColor,
+        subtype: subtypeVal,
+        color_hex: processedColor,
+        alpha: document.getElementById('alpha').value,
+        weight: weightVal,
         min_temp: minVal,
         max_temp: maxVal
       };
@@ -156,7 +212,7 @@
       const encoder = new TextEncoder();
       const encodedData = encoder.encode(payloadString);
 
-      logDiv.innerHTML = "Ожидание метки... Приложите чип к телефону.";
+      logDiv.innerHTML = "Ожидание метки... Приложите NTAG216 к телефону.";
 
       try {
         const ndef = new NDEFReader();
