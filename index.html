@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>OpenSpool Writer для U1 Extended v1.3</title>
+  <title>OpenSpool Writer для U1 Extended v1.4</title>
 
   <!-- PWA и метатеги для мобилок -->
   <link rel="manifest" href="manifest.json">
@@ -45,19 +45,33 @@
     .color-row > div {
       flex: 1;
     }
+    .btn-group {
+      display: flex;
+      gap: 10px;
+      margin-top: 10px;
+    }
     button {
-      width: 100%;
+      flex: 1;
       padding: 12px;
-      background: #4caf50;
       color: white;
       border: none;
       border-radius: 6px;
-      font-size: 15px;
+      font-size: 14px;
       font-weight: bold;
       cursor: pointer;
-      margin-top: 5px;
     }
-    button:active { background: #388e3c; }
+    #writeBtn { background: #4caf50; }
+    #writeBtn:active { background: #388e3c; }
+    #readBtn { background: #2196f3; }
+    #readBtn:active { background: #1976d2; }
+    #cancelBtn {
+      width: 100%;
+      background: #f44336;
+      margin-top: 8px;
+      display: none;
+    }
+    #cancelBtn:active { background: #d32f2f; }
+    button:disabled { opacity: 0.5; cursor: not-allowed; }
     #log { margin-top: 12px; font-size: 12px; color: #aaa; text-align: center; word-break: break-all; }
     .success { color: #4caf50 !important; }
     .error { color: #f44336 !important; }
@@ -65,7 +79,7 @@
 </head>
 <body>
 
-  <h2>OpenSpool Writer (NTAG216) v1.3</h2>
+  <h2>OpenSpool Writer (NTAG216) v1.4</h2>
 
   <div class="form-group">
     <label>Бренд:</label>
@@ -81,13 +95,14 @@
       <option value="PETG-GF">PETG-GF</option>
       <option value="ABS">ABS</option>
       <option value="ASA">ASA</option>
+      <option value="SBS">SBS</option>
       <option value="TPU">TPU</option>
     </select>
   </div>
 
   <div class="form-group">
     <label>Подтип (необязательно):</label>
-    <input type="text" id="subtype" placeholder="Plus, Silk, Matte, High Speed...">
+    <input type="text" id="subtype" placeholder="Plus, Silk, Matte, Glass...">
   </div>
 
   <div class="color-row">
@@ -131,29 +146,39 @@
     <input type="number" id="max_temp" step="1">
   </div>
 
-  <button id="writeBtn">Записать на чип NTAG216</button>
-  <div id="log">Приложите чип после нажатия</div>
+  <div class="btn-group">
+    <button id="writeBtn">Записать</button>
+    <button id="readBtn">Считать</button>
+  </div>
+  <button id="cancelBtn">Отменить ожидание</button>
+
+  <div id="log">Выберите действие и приложите метку</div>
 
   <script>
-    // Регистрация Service Worker для PWA
     if ('serviceWorker' in navigator) {
       navigator.serviceWorker.register('sw.js').catch(() => {});
     }
 
     const defaultTemps = {
-      "PLA":      { min: 190, max: 220 },
-      "PETG":     { min: 230, max: 250 },
+      "PLA":     { min: 190, max: 220 },
+      "PETG":    { min: 230, max: 250 },
       "PETG-CF": { min: 240, max: 260 },
       "PETG-GF": { min: 240, max: 260 },
-      "ABS":      { min: 250, max: 270 },
-      "ASA":      { min: 250, max: 270 },
-      "TPU":      { min: 210, max: 230 }
+      "ABS":     { min: 250, max: 270 },
+      "ASA":     { min: 250, max: 270 },
+      "SBS":     { min: 220, max: 240 },
+      "TPU":     { min: 210, max: 230 }
     };
 
     const matSelect = document.getElementById('material');
     const minTempInput = document.getElementById('min_temp');
     const maxTempInput = document.getElementById('max_temp');
     const logDiv = document.getElementById('log');
+    const writeBtn = document.getElementById('writeBtn');
+    const readBtn = document.getElementById('readBtn');
+    const cancelBtn = document.getElementById('cancelBtn');
+
+    let abortController = null;
 
     matSelect.addEventListener('change', (e) => {
       const mat = e.target.value;
@@ -162,21 +187,52 @@
         maxTempInput.value = defaultTemps[mat].max;
       }
     });
-
     matSelect.dispatchEvent(new Event('change'));
 
-    // Функция конвертации порядка байт цвета
+    // Кодирование цвета под U1/Стандарт
     function formatColorHex(hex, format) {
       const r = hex.substring(0, 2);
       const g = hex.substring(2, 4);
       const b = hex.substring(4, 6);
 
-      if (format === 'GRB') return g + r + b; // Перестановка R и G для U1
+      if (format === 'GRB') return g + r + b;
       if (format === 'BGR') return b + g + r;
       return r + g + b;
     }
 
-    document.getElementById('writeBtn').addEventListener('click', async () => {
+    // Декодирование обратно в стандартный RGB для <input type="color">
+    function parseColorToRGBHex(storedHex, format) {
+      if (!storedHex || storedHex.length < 6) return "FF69B4";
+      const c1 = storedHex.substring(0, 2);
+      const c2 = storedHex.substring(2, 4);
+      const c3 = storedHex.substring(4, 6);
+
+      let r = c1, g = c2, b = c3;
+      if (format === 'GRB') { g = c1; r = c2; b = c3; }
+      else if (format === 'BGR') { b = c1; g = c2; r = c3; }
+
+      return `#${r}${g}${b}`;
+    }
+
+    function setBusyState(isBusy) {
+      writeBtn.disabled = isBusy;
+      readBtn.disabled = isBusy;
+      cancelBtn.style.display = isBusy ? 'block' : 'none';
+    }
+
+    function cancelCurrentOperation() {
+      if (abortController) {
+        abortController.abort();
+        abortController = null;
+      }
+      setBusyState(false);
+      logDiv.innerHTML = "Операция отменена.";
+    }
+
+    cancelBtn.addEventListener('click', cancelCurrentOperation);
+
+    // --- ЗАПИСЬ ---
+    writeBtn.addEventListener('click', async () => {
       if (!("NDEFReader" in window)) {
         logDiv.innerHTML = "<span class='error'>Web NFC не поддерживается! Откройте в Chrome на Android.</span>";
         return;
@@ -184,8 +240,6 @@
 
       const minVal = parseInt(minTempInput.value) || 0;
       const maxVal = parseInt(maxTempInput.value) || 0;
-      const weightVal = parseInt(document.getElementById('weight').value) || 1000;
-
       if (maxVal < minVal) {
         logDiv.innerHTML = "<span class='error'>❌ Макс. температура должна быть больше или равна мин.!</span>";
         return;
@@ -194,24 +248,24 @@
       const rawColor = document.getElementById('color').value.replace('#', '');
       const colorFormat = document.getElementById('color_format').value;
       const processedColor = formatColorHex(rawColor, colorFormat).toUpperCase();
-      const subtypeVal = document.getElementById('subtype').value.trim();
 
       const payloadObj = {
         protocol: "openspool",
         brand: document.getElementById('brand').value || "Generic",
         type: matSelect.value,
-        subtype: subtypeVal,
+        subtype: document.getElementById('subtype').value.trim(),
         color_hex: processedColor,
         alpha: document.getElementById('alpha').value,
-        weight: weightVal,
+        weight: parseInt(document.getElementById('weight').value) || 1000,
         min_temp: minVal,
         max_temp: maxVal
       };
 
       const payloadString = JSON.stringify(payloadObj);
-      const encoder = new TextEncoder();
-      const encodedData = encoder.encode(payloadString);
+      const encodedData = new TextEncoder().encode(payloadString);
 
+      abortController = new AbortController();
+      setBusyState(true);
       logDiv.innerHTML = "Ожидание метки... Приложите NTAG216 к телефону.";
 
       try {
@@ -222,10 +276,78 @@
             mediaType: "application/json",
             data: encodedData
           }]
-        });
+        }, { signal: abortController.signal });
+
         logDiv.innerHTML = `<span class='success'>✅ Успешно записано!</span><br><br><code>${payloadString}</code>`;
       } catch (error) {
-        logDiv.innerHTML = `<span class='error'>❌ Ошибка: ${error.message}</span>`;
+        if (error.name !== 'AbortError') {
+          logDiv.innerHTML = `<span class='error'>❌ Ошибка записи: ${error.message}</span>`;
+        }
+      } finally {
+        setBusyState(false);
+      }
+    });
+
+    // --- ЧТЕНИЕ ---
+    readBtn.addEventListener('click', async () => {
+      if (!("NDEFReader" in window)) {
+        logDiv.innerHTML = "<span class='error'>Web NFC не поддерживается! Откройте в Chrome на Android.</span>";
+        return;
+      }
+
+      abortController = new AbortController();
+      setBusyState(true);
+      logDiv.innerHTML = "Ожидание метки... Приложите NTAG216 для чтения.";
+
+      try {
+        const ndef = new NDEFReader();
+        await ndef.scan({ signal: abortController.signal });
+
+        ndef.addEventListener("reading", ({ message }) => {
+          let parsed = false;
+          for (const record of message.records) {
+            if (record.recordType === "mime" && record.mediaType === "application/json") {
+              try {
+                const jsonText = new TextDecoder().decode(record.data);
+                const data = JSON.parse(jsonText);
+
+                // Заполнение полей формы данными из чипа
+                if (data.brand) document.getElementById('brand').value = data.brand;
+                if (data.type) {
+                  matSelect.value = data.type;
+                  matSelect.dispatchEvent(new Event('change'));
+                }
+                if (data.subtype !== undefined) document.getElementById('subtype').value = data.subtype;
+                if (data.weight) document.getElementById('weight').value = data.weight;
+                if (data.min_temp !== undefined) minTempInput.value = data.min_temp;
+                if (data.max_temp !== undefined) maxTempInput.value = data.max_temp;
+                if (data.alpha) document.getElementById('alpha').value = data.alpha;
+
+                const currentFormat = document.getElementById('color_format').value;
+                if (data.color_hex) {
+                  document.getElementById('color').value = parseColorToRGBHex(data.color_hex, currentFormat);
+                }
+
+                logDiv.innerHTML = `<span class='success'>✅ Считано с чипа:</span><br><br><code>${jsonText}</code>`;
+                parsed = true;
+                break;
+              } catch (e) {
+                logDiv.innerHTML = "<span class='error'>❌ Ошибка разбора JSON на метке</span>";
+              }
+            }
+          }
+
+          if (!parsed) {
+            logDiv.innerHTML = "<span class='error'>❌ OpenSpool JSON не найден на этой метке</span>";
+          }
+          setBusyState(false);
+        }, { once: true });
+
+      } catch (error) {
+        if (error.name !== 'AbortError') {
+          logDiv.innerHTML = `<span class='error'>❌ Ошибка сканирования: ${error.message}</span>`;
+        }
+        setBusyState(false);
       }
     });
   </script>
