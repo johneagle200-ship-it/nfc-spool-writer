@@ -1,6 +1,5 @@
 const CACHE_NAME = 'openspool-v1.6';
-const ASSETS = [
-  './',
+const ASSETS = [  './',
   './index.html',
   './manifest.json'
 ];
