@@ -79,7 +79,7 @@
 </head>
 <body>
 
-  <h2>OpenSpool Writer (NTAG216) v1.4</h2>
+  <h2>OpenSpool Writer (NTAG216) v1.5</h2>
 
   <div class="form-group">
     <label>Бренд:</label>
@@ -122,7 +122,7 @@
     </div>
   </div>
 
-<div class="form-group">
+  <div class="form-group">
     <label>Формат цвета (кодировка):</label>
     <select id="color_format">
       <option value="RGB" selected>RGB (Стандарт / Snapmaker U1)</option>
@@ -155,8 +155,21 @@
   <div id="log">Выберите действие и приложите метку</div>
 
   <script>
+    // --- АВТООБНОВЛЕНИЕ PWA И SERVICE WORKER ---
     if ('serviceWorker' in navigator) {
-      navigator.serviceWorker.register('sw.js').catch(() => {});
+      window.addEventListener('load', () => {
+        navigator.serviceWorker.register('./sw.js').then((reg) => {
+          reg.update(); // Проверяем обновления при каждом запуске
+        }).catch(() => {});
+
+        let refreshing = false;
+        navigator.serviceWorker.addEventListener('controllerchange', () => {
+          if (!refreshing) {
+            refreshing = true;
+            window.location.reload(); // Перезагружаем при установке новой версии
+          }
+        });
+      });
     }
 
     const defaultTemps = {
