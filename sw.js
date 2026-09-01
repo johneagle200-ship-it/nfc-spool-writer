@@ -1,14 +1,18 @@
 const CACHE_NAME = 'openspool-v1.6';
-const ASSETS = [  './',
+const ASSETS = [
+  './',
   './index.html',
   './manifest.json'
 ];
 
 self.addEventListener('install', (event) => {
-  event.waitUntil(
-    caches.open(CACHE_NAME).then((cache) => cache.addAll(ASSETS))
-  );
   self.skipWaiting();
+  event.waitUntil(
+    caches.open(CACHE_NAME).then((cache) => {
+      // {cache: 'reload'} принуждает браузер игнорировать HTTP-кэш и качать с сервера
+      return cache.addAll(ASSETS.map(url => new Request(url, { cache: 'reload' })));
+    })
+  );
 });
 
 self.addEventListener('activate', (event) => {
@@ -19,9 +23,8 @@ self.addEventListener('activate', (event) => {
           if (key !== CACHE_NAME) return caches.delete(key);
         })
       )
-    )
+    ).then(() => self.clients.claim())
   );
-  self.clients.claim();
 });
 
 self.addEventListener('fetch', (event) => {
